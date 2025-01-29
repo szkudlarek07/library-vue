@@ -1,87 +1,194 @@
-<script setup>
-import { RouterLink, RouterView } from 'vue-router'
-import HelloWorld from './components/HelloWorld.vue'
-import BooksIndex from './components/BooksIndex.vue'
-
-</script>
-
 <template>
-  <header>
-    <img alt="Vue logo" class="logo" src="@/assets/logo.svg" width="125" height="125" />
+  <div id="app">
+    <h1>Lista Książek</h1>
+    <Button class='addbutton' severity="success" @click="showAddBookModal = true">Dodaj książkę</button>
+    <DataView :value="books" :sortOrder="sortOrder" :sortField="sortField">
+      <template #list="slotProps">
+        <div v-for="(item, index) in slotProps.items" :key="index" class="book-item">
+          <!-- Obrazek książki -->
+          <img class="book-image"
+            :src="`https://img.freepik.com/premium-wektory/otwarta-ksiazka-do-czytania-recznie-rysowane-symbol_599395-224.jpg?w=360`"
+            :alt="item.name" />
 
-    <div class="wrapper">
-      <HelloWorld msg="You did it!" />
+          <!-- Informacje o książce -->
+          <div class="book-info">
+            <div class="book-author">{{ item.author }}</div>
+            <div class="book-title">{{ item.title }}</div>
+          </div>
 
-      <nav>
-        <RouterLink to="/">Home</RouterLink>
-        <RouterLink to="/about">About</RouterLink>
-      </nav>
-    </div>
-  </header>
-
-  <RouterView />
+          <!-- Cena i przyciski -->
+          <div class="book-actions">
+            <span class="book-price"><i class="pi pi-star"></i> {{ Math.round(item.avg_rate * 10) / 10 }}/5</span>
+            <div class="book-buttons">
+              <Button severity="success" icon="pi pi-heart" outlined></Button>
+              <Button severity="success" icon="pi pi-book" label="Details" :disabled="item.inventoryStatus === 'OUTOFSTOCK'"></Button>
+            </div>
+          </div>
+        </div>
+      </template>
+    </DataView>
+  </div>
 </template>
 
+<script>
+import axios from 'axios';
+
+export default {
+  data() {
+    return {
+      books: [],
+      loading: true,
+      showAddBookModal: false,
+      isEditing: false,
+      currentBook: {
+        id: null,
+        title: '',
+        author: '',
+        year: '',
+        image: ''
+      }
+    };
+  },
+  async created() {
+    await this.fetchBooks();
+  },
+  methods: {
+    async fetchBooks() {
+      try {
+        const response = await axios.get('http://localhost:8000/api/books');
+        this.books = response.data.data;
+        await this.fetchReviews();
+      } catch (error) {
+        console.error('Błąd podczas pobierania książek:', error);
+      } finally {
+        this.loading = false;
+      }
+    },
+    async fetchReviews() {
+      for (let book of this.books) {
+        try {
+          const response = await axios.get(`http://localhost:8000/api/reviews?book_id=${book.id}`);
+          const reviews = response.data.data;
+          if (reviews.length > 0) {
+            const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
+            book.averageRating = (totalRating / reviews.length).toFixed(2);
+          } else {
+            book.averageRating = null;
+          }
+        } catch (error) {
+          console.error('Błąd podczas pobierania recenzji:', error);
+        }
+      }
+    },
+    async addBook() {
+      try {
+        const response = await axios.post('http://localhost:8000/api/books', this.currentBook);
+        this.books.push(response.data);
+        this.showAddBookModal = false;
+        this.resetCurrentBook();
+      } catch (error) {
+        console.error('Błąd podczas dodawania książki:', error);
+      }
+    },
+    async updateBook() {
+      try {
+        const response = await axios.put(`http://localhost:8000/api/books/${this.currentBook.id}`, this.currentBook);
+        const index = this.books.findIndex(book => book.id === this.currentBook.id);
+        this.books.splice(index, 1, response.data);
+        this.showAddBookModal = false;
+        this.resetCurrentBook();
+      } catch (error) {
+        console.error('Błąd podczas aktualizacji książki:', error);
+      }
+    },
+    async deleteBook(bookId) {
+      try {
+        await axios.delete(`http://localhost:8000/api/books/${bookId}`);
+        this.books = this.books.filter(book => book.id !== bookId);
+      } catch (error) {
+        console.error('Błąd podczas usuwania książki:', error);
+      }
+    },
+    editBook(book) {
+      this.currentBook = { ...book };
+      this.isEditing = true;
+      this.showAddBookModal = true;
+    },
+    resetCurrentBook() {
+      this.currentBook = {
+        id: null,
+        title: '',
+        author: '',
+        year: '',
+        image: ''
+      };
+      this.isEditing = false;
+    }
+  }
+};
+</script>
 <style scoped>
-header {
-  line-height: 1.5;
-  max-height: 100vh;
-}
-
-.logo {
-  display: block;
-  margin: 0 auto 2rem;
-}
-
-nav {
-  width: 100%;
-  font-size: 12px;
+h1 {
   text-align: center;
-  margin-top: 2rem;
 }
 
-nav a.router-link-exact-active {
-  color: var(--color-text);
+.addbutton {
+  min-width: 100%;
+  margin-top: 20px;
+  margin-bottom: 20px;
 }
 
-nav a.router-link-exact-active:hover {
-  background-color: transparent;
+/* Ustawienie kontenera książki */
+.book-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid #e0e0e0;
 }
 
-nav a {
-  display: inline-block;
-  padding: 0 1rem;
-  border-left: 1px solid var(--color-border);
+/* Styl dla obrazka */
+.book-image {
+  width: 100px;
+  height: auto;
+  border-radius: 8px;
 }
 
-nav a:first-of-type {
-  border: 0;
+/* Styl dla sekcji informacji o książce */
+.book-info {
+  flex-grow: 1;
+  padding-left: 16px;
 }
 
-@media (min-width: 1024px) {
-  header {
-    display: flex;
-    place-items: center;
-    padding-right: calc(var(--section-gap) / 2);
-  }
+/* Styl dla autora i tytułu */
+.book-author {
+  font-size: 14px;
+  color: #666;
+}
 
-  .logo {
-    margin: 0 2rem 0 0;
-  }
+.book-title {
+  font-size: 18px;
+  font-weight: bold;
+  margin-top: 4px;
+}
 
-  header .wrapper {
-    display: flex;
-    place-items: flex-start;
-    flex-wrap: wrap;
-  }
+/* Styl dla sekcji z ceną i przyciskami */
+.book-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
 
-  nav {
-    text-align: left;
-    margin-left: -1rem;
-    font-size: 1rem;
+/* Styl dla ceny */
+.book-price {
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
 
-    padding: 1rem 0;
-    margin-top: 1rem;
-  }
+/* Styl dla przycisków */
+.book-buttons {
+  display: flex;
+  gap: 8px;
 }
 </style>
